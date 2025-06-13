@@ -1,27 +1,69 @@
-import React, { useState, useMemo } from 'react';
-import { Search, Filter, Code, Calendar, Tag, Lightbulb, Trash2, Edit, Eye } from 'lucide-react';
-import { mockErrorLogs } from '../../data/mockData';
+import React, { useState, useEffect } from 'react';
+import { Search, Filter, Code, Calendar, Tag, Lightbulb, Trash2, Edit, Eye, ChevronLeft, ChevronRight } from 'lucide-react';
 import { ErrorLog } from '../../types';
+import { apiService } from '../../service/api';
 
 export const ErrorLogsList: React.FC = () => {
+  const [errorLogs, setErrorLogs] = useState<ErrorLog[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedLanguage, setSelectedLanguage] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
   const [selectedError, setSelectedError] = useState<ErrorLog | null>(null);
+  const [pagination, setPagination] = useState({
+    currentPage: 1,
+    totalPages: 1,
+    totalItems: 0,
+    itemsPerPage: 9
+  });
+  const [languages, setLanguages] = useState<string[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
 
-  const filteredErrors = useMemo(() => {
-    return mockErrorLogs.filter(error => {
-      const matchesSearch = error.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          error.description.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesLanguage = !selectedLanguage || error.programmingLanguage === selectedLanguage;
-      const matchesCategory = !selectedCategory || error.category === selectedCategory;
+  const fetchErrorLogs = async (page = 1) => {
+    try {
+      setLoading(true);
+      const response = await apiService.getErrorLogs({
+        page,
+        limit: pagination.itemsPerPage,
+        programmingLanguage: selectedLanguage,
+        category: selectedCategory,
+        search: searchTerm
+      });
       
-      return matchesSearch && matchesLanguage && matchesCategory;
-    });
+      setErrorLogs(response.errorLogs);
+      setPagination(response.pagination);
+      
+      // Extract unique languages and categories
+      const uniqueLanguages = [...new Set(response.errorLogs.map(error => error.programmingLanguage))];
+      const uniqueCategories = [...new Set(response.errorLogs.map(error => error.category))];
+      setLanguages(uniqueLanguages);
+      setCategories(uniqueCategories);
+    } catch (error) {
+      console.error('Failed to fetch error logs:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchErrorLogs(1);
   }, [searchTerm, selectedLanguage, selectedCategory]);
 
-  const languages = [...new Set(mockErrorLogs.map(error => error.programmingLanguage))];
-  const categories = [...new Set(mockErrorLogs.map(error => error.category))];
+  const handlePageChange = (page: number) => {
+    fetchErrorLogs(page);
+  };
+
+  const handleDelete = async (id: string) => {
+    if (window.confirm('Are you sure you want to delete this error log?')) {
+      try {
+        await apiService.deleteErrorLog(id);
+        fetchErrorLogs(pagination.currentPage);
+      } catch (error) {
+        console.error('Failed to delete error log:', error);
+        alert('Failed to delete error log');
+      }
+    }
+  };
 
   const ErrorCard: React.FC<{ error: ErrorLog }> = ({ error }) => (
     <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md hover:shadow-lg transition-all duration-300 transform hover:scale-[1.02] border border-gray-100 dark:border-gray-700 overflow-hidden h-full flex flex-col">
@@ -46,6 +88,7 @@ export const ErrorLogsList: React.FC = () => {
               <Edit className="h-4 w-4" />
             </button>
             <button
+              onClick={() => handleDelete(error.id)}
               className="p-2 text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors duration-200"
               title="Delete"
             >
@@ -164,6 +207,61 @@ export const ErrorLogsList: React.FC = () => {
     );
   };
 
+  const Pagination: React.FC = () => {
+    if (pagination.totalPages <= 1) return null;
+
+    return (
+      <div className="flex items-center justify-between mt-8">
+        <div className="text-sm text-gray-700 dark:text-gray-300">
+          Showing {((pagination.currentPage - 1) * pagination.itemsPerPage) + 1} to{' '}
+          {Math.min(pagination.currentPage * pagination.itemsPerPage, pagination.totalItems)} of{' '}
+          {pagination.totalItems} results
+        </div>
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={() => handlePageChange(pagination.currentPage - 1)}
+            disabled={pagination.currentPage === 1}
+            className="p-2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </button>
+          
+          {Array.from({ length: pagination.totalPages }, (_, i) => i + 1).map(page => (
+            <button
+              key={page}
+              onClick={() => handlePageChange(page)}
+              className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors duration-200 ${
+                page === pagination.currentPage
+                  ? 'bg-purple-500 text-white'
+                  : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+              }`}
+            >
+              {page}
+            </button>
+          ))}
+          
+          <button
+            onClick={() => handlePageChange(pagination.currentPage + 1)}
+            disabled={pagination.currentPage === pagination.totalPages}
+            className="p-2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <ChevronRight className="h-5 w-5" />
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  if (loading) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="flex items-center justify-center h-64">
+          <div className="w-8 h-8 border-4 border-purple-500/30 border-t-purple-500 rounded-full animate-spin"></div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="mb-8">
@@ -218,18 +316,21 @@ export const ErrorLogsList: React.FC = () => {
       {/* Results Summary */}
       <div className="mb-6">
         <p className="text-gray-600 dark:text-gray-300">
-          Showing <span className="font-semibold text-gray-900 dark:text-white">{filteredErrors.length}</span> of{' '}
-          <span className="font-semibold text-gray-900 dark:text-white">{mockErrorLogs.length}</span> error logs
+          Showing <span className="font-semibold text-gray-900 dark:text-white">{errorLogs.length}</span> of{' '}
+          <span className="font-semibold text-gray-900 dark:text-white">{pagination.totalItems}</span> error logs
         </p>
       </div>
 
       {/* Error Cards Grid */}
-      {filteredErrors.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredErrors.map(error => (
-            <ErrorCard key={error.id} error={error} />
-          ))}
-        </div>
+      {errorLogs.length > 0 ? (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {errorLogs.map(error => (
+              <ErrorCard key={error.id} error={error} />
+            ))}
+          </div>
+          <Pagination />
+        </>
       ) : (
         <div className="text-center py-12">
           <div className="w-16 h-16 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center mx-auto mb-4">

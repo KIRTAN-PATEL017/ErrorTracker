@@ -1,8 +1,7 @@
-import React, { useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   BarChart3, 
-  TrendingUp, 
-  Calendar, 
+  TrendingUp,
   Code, 
   AlertTriangle, 
   Target,
@@ -11,51 +10,25 @@ import {
   Award,
   Activity
 } from 'lucide-react';
-import { mockErrorLogs } from '../../data/mockData';
+import { apiService } from '../../service/api';
 
 export const Analytics: React.FC = () => {
-  const analytics = useMemo(() => {
-    const totalErrors = mockErrorLogs.length;
-    
-    // Language analytics
-    const languageStats = mockErrorLogs.reduce((acc, error) => {
-      acc[error.programmingLanguage] = (acc[error.programmingLanguage] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
+  const [analytics, setAnalytics] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
-    // Category analytics
-    const categoryStats = mockErrorLogs.reduce((acc, error) => {
-      acc[error.category] = (acc[error.category] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
-
-    // Monthly analytics
-    const monthlyStats = mockErrorLogs.reduce((acc, error) => {
-      const month = new Date(error.createdAt).toLocaleDateString('en-US', { 
-        year: 'numeric', 
-        month: 'short' 
-      });
-      acc[month] = (acc[month] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
-
-    // Most problematic areas
-    const topLanguages = Object.entries(languageStats)
-      .sort(([,a], [,b]) => b - a)
-      .slice(0, 5);
-    
-    const topCategories = Object.entries(categoryStats)
-      .sort(([,a], [,b]) => b - a)
-      .slice(0, 5);
-
-    return {
-      totalErrors,
-      languageStats,
-      categoryStats,
-      monthlyStats,
-      topLanguages,
-      topCategories
+  useEffect(() => {
+    const fetchAnalytics = async () => {
+      try {
+        const data = await apiService.getAnalytics();
+        setAnalytics(data);
+      } catch (error) {
+        console.error('Failed to fetch analytics:', error);
+      } finally {
+        setLoading(false);
+      }
     };
+
+    fetchAnalytics();
   }, []);
 
   const StatCard: React.FC<{
@@ -112,7 +85,7 @@ export const Analytics: React.FC = () => {
     total: number;
     color: string;
   }> = ({ label, value, total, color }) => {
-    const percentage = (value / total) * 100;
+    const percentage = total > 0 ? (value / total) * 100 : 0;
     return (
       <div className="space-y-2">
         <div className="flex justify-between items-center">
@@ -132,6 +105,36 @@ export const Analytics: React.FC = () => {
     );
   };
 
+  if (loading) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="flex items-center justify-center h-64">
+          <div className="w-8 h-8 border-4 border-purple-500/30 border-t-purple-500 rounded-full animate-spin"></div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!analytics) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="text-center py-12">
+          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">No analytics data available</h3>
+          <p className="text-gray-500 dark:text-gray-400">Start logging errors to see your analytics</p>
+        </div>
+      </div>
+    );
+  }
+
+  const topLanguage = analytics.languageStats[0];
+  const topCategory = analytics.categoryStats[0];
+  const thisWeekErrors = analytics.recentErrors.filter((error: any) => {
+    const errorDate = new Date(error.createdAt);
+    const weekAgo = new Date();
+    weekAgo.setDate(weekAgo.getDate() - 7);
+    return errorDate >= weekAgo;
+  }).length;
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="mb-8">
@@ -147,22 +150,22 @@ export const Analytics: React.FC = () => {
           icon={Code}
           gradient="from-purple-500 to-purple-600"
           description="All time"
-          trend="+3 this week"
+          trend={`+${thisWeekErrors} this week`}
         />
         <StatCard
           title="Most Common Language"
-          value={analytics.topLanguages[0]?.[0] || 'N/A'}
+          value={topLanguage?.language || 'N/A'}
           icon={TrendingUp}
           gradient="from-blue-500 to-blue-600"
-          description={`${analytics.topLanguages[0]?.[1] || 0} errors`}
-          trend="JavaScript leads"
+          description={`${topLanguage?.count || 0} errors`}
+          trend={`${topLanguage?.language || 'No'} leads`}
         />
         <StatCard
           title="Top Error Type"
-          value={analytics.topCategories[0]?.[0] || 'N/A'}
+          value={topCategory?.category || 'N/A'}
           icon={AlertTriangle}
           gradient="from-teal-500 to-teal-600"
-          description={`${analytics.topCategories[0]?.[1] || 0} occurrences`}
+          description={`${topCategory?.count || 0} occurrences`}
           trend="Focus area identified"
         />
         <StatCard
@@ -183,11 +186,11 @@ export const Analytics: React.FC = () => {
           iconColor="bg-purple-500"
         >
           <div className="space-y-4">
-            {analytics.topLanguages.map(([language, count], index) => (
+            {analytics.languageStats.slice(0, 5).map((stat: any, index: number) => (
               <ProgressBar
-                key={language}
-                label={language}
-                value={count}
+                key={stat.language}
+                label={stat.language}
+                value={stat.count}
                 total={analytics.totalErrors}
                 color={`bg-gradient-to-r ${
                   index === 0 ? 'from-purple-500 to-purple-600' :
@@ -208,11 +211,11 @@ export const Analytics: React.FC = () => {
           iconColor="bg-teal-500"
         >
           <div className="space-y-4">
-            {analytics.topCategories.map(([category, count], index) => (
+            {analytics.categoryStats.slice(0, 5).map((stat: any, index: number) => (
               <ProgressBar
-                key={category}
-                label={category}
-                value={count}
+                key={stat.category}
+                label={stat.category}
+                value={stat.count}
                 total={analytics.totalErrors}
                 color={`bg-gradient-to-r ${
                   index === 0 ? 'from-teal-500 to-teal-600' :
@@ -233,22 +236,27 @@ export const Analytics: React.FC = () => {
           iconColor="bg-blue-500"
         >
           <div className="space-y-4">
-            {Object.entries(analytics.monthlyStats)
-              .sort(([a], [b]) => new Date(a).getTime() - new Date(b).getTime())
-              .map(([month, count]) => (
-                <div key={month} className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{month}</span>
+            {analytics.monthlyStats.slice(0, 6).map((stat: any) => {
+              const monthName = new Date(stat.year, stat.month - 1).toLocaleDateString('en-US', { 
+                year: 'numeric', 
+                month: 'short' 
+              });
+              const maxCount = Math.max(...analytics.monthlyStats.map((s: any) => s.count));
+              return (
+                <div key={`${stat.year}-${stat.month}`} className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{monthName}</span>
                   <div className="flex items-center space-x-2">
                     <div className="w-20 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
                       <div
                         className="bg-gradient-to-r from-blue-500 to-blue-600 h-2 rounded-full"
-                        style={{ width: `${(count / Math.max(...Object.values(analytics.monthlyStats))) * 100}%` }}
+                        style={{ width: `${(stat.count / maxCount) * 100}%` }}
                       ></div>
                     </div>
-                    <span className="text-sm text-gray-500 dark:text-gray-400 w-8 text-right">{count}</span>
+                    <span className="text-sm text-gray-500 dark:text-gray-400 w-8 text-right">{stat.count}</span>
                   </div>
                 </div>
-              ))}
+              );
+            })}
           </div>
         </AnalyticsCard>
 
@@ -275,7 +283,7 @@ export const Analytics: React.FC = () => {
                 <span className="text-sm font-medium text-yellow-800 dark:text-yellow-300">Focus Areas</span>
               </div>
               <p className="text-sm text-yellow-700 dark:text-yellow-400">
-                {analytics.topCategories[0]?.[0]} seems to be your main challenge. Consider reviewing best practices.
+                {topCategory?.category || 'Error logging'} seems to be your main challenge. Consider reviewing best practices.
               </p>
             </div>
 
@@ -285,7 +293,7 @@ export const Analytics: React.FC = () => {
                 <span className="text-sm font-medium text-blue-800 dark:text-blue-300">Recommendation</span>
               </div>
               <p className="text-sm text-blue-700 dark:text-blue-400">
-                Focus on {analytics.topLanguages[0]?.[0]} fundamentals to reduce common errors.
+                Focus on {topLanguage?.language || 'programming'} fundamentals to reduce common errors.
               </p>
             </div>
           </div>

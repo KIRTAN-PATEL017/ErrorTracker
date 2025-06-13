@@ -1,15 +1,12 @@
 import React, { useState } from 'react';
 import { Save, Code, AlertTriangle, FileText, Lightbulb, X } from 'lucide-react';
-import { programmingLanguages, errorCategories } from '../../data/mockData';
-import { ErrorLog } from '../../types';
-import { useAuth } from '../../contexts/AuthContext';
+import { apiService } from '../../service/api';
 
 interface AddErrorFormProps {
   onSuccess: () => void;
 }
 
 export const AddErrorForm: React.FC<AddErrorFormProps> = ({ onSuccess }) => {
-  const { user } = useAuth();
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -19,24 +16,15 @@ export const AddErrorForm: React.FC<AddErrorFormProps> = ({ onSuccess }) => {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [error, setError] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
+    setError('');
 
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      const newError: ErrorLog = {
-        id: Date.now().toString(),
-        ...formData,
-        createdAt: new Date().toISOString(),
-        userId: user?.id || ''
-      };
-
-      // In a real app, this would save to the backend
-      console.log('New error logged:', newError);
+      await apiService.createErrorLog(formData);
       
       setShowSuccess(true);
       setTimeout(() => {
@@ -52,8 +40,8 @@ export const AddErrorForm: React.FC<AddErrorFormProps> = ({ onSuccess }) => {
         category: '',
         solution: ''
       });
-    } catch (error) {
-      console.error('Failed to save error:', error);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save error log');
     } finally {
       setIsSubmitting(false);
     }
@@ -90,6 +78,13 @@ export const AddErrorForm: React.FC<AddErrorFormProps> = ({ onSuccess }) => {
       </div>
 
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-8 border border-gray-100 dark:border-gray-700 transition-colors duration-300">
+        {error && (
+          <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-center space-x-2 text-red-700 dark:text-red-400">
+            <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+            <span className="text-sm">{error}</span>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-8">
           {/* Title */}
           <div>

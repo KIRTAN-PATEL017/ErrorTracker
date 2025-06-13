@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { AuthContextType, User } from '../types';
-import { mockUser } from '../data/mockData';
+import { apiService } from '../services/api';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -17,28 +17,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Check if user is logged in (simulate checking localStorage or token)
-    const savedUser = localStorage.getItem('user');
-    if (savedUser) {
-      setUser(JSON.parse(savedUser));
-    }
-    setIsLoading(false);
+    // Check if user is logged in
+    const checkAuth = async () => {
+      const token = localStorage.getItem('token');
+      const savedUser = localStorage.getItem('user');
+      
+      if (token && savedUser) {
+        try {
+          // Verify token is still valid by fetching profile
+          const { user: currentUser } = await apiService.getProfile();
+          setUser(currentUser);
+          localStorage.setItem('user', JSON.stringify(currentUser));
+        } catch (error) {
+          // Token is invalid, clear storage
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          setUser(null);
+        }
+      }
+      setIsLoading(false);
+    };
+
+    checkAuth();
   }, []);
 
   const login = async (email: string, password: string) => {
     setIsLoading(true);
     try {
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Mock login validation
-      if (email === 'demo@example.com' && password === 'password') {
-        const user = { ...mockUser, email };
-        setUser(user);
-        localStorage.setItem('user', JSON.stringify(user));
-      } else {
-        throw new Error('Invalid credentials');
-      }
+      const { user: loggedInUser } = await apiService.login(email, password);
+      setUser(loggedInUser);
+    } catch (error) {
+      throw error;
     } finally {
       setIsLoading(false);
     }
@@ -47,18 +56,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const register = async (name: string, email: string, password: string) => {
     setIsLoading(true);
     try {
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      const newUser: User = {
-        id: Date.now().toString(),
-        name,
-        email,
-        createdAt: new Date().toISOString()
-      };
-      
+      const { user: newUser } = await apiService.register(name, email, password);
       setUser(newUser);
-      localStorage.setItem('user', JSON.stringify(newUser));
+    } catch (error) {
+      throw error;
     } finally {
       setIsLoading(false);
     }
@@ -66,6 +67,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = () => {
     setUser(null);
+    localStorage.removeItem('token');
     localStorage.removeItem('user');
   };
 

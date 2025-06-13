@@ -1,36 +1,25 @@
-import React, { useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Code, AlertTriangle, TrendingUp, Calendar, Target, Award } from 'lucide-react';
-import { mockErrorLogs } from '../../data/mockData';
 import { ErrorLog } from '../../types';
+import { apiService } from '../../service/api';
 
 export const Dashboard: React.FC = () => {
-  const analytics = useMemo(() => {
-    const totalErrors = mockErrorLogs.length;
-    const languageStats = mockErrorLogs.reduce((acc, error) => {
-      acc[error.programmingLanguage] = (acc[error.programmingLanguage] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
+  const [analytics, setAnalytics] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
-    const categoryStats = mockErrorLogs.reduce((acc, error) => {
-      acc[error.category] = (acc[error.category] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
-
-    const topLanguage = Object.entries(languageStats).sort(([,a], [,b]) => b - a)[0];
-    const topCategory = Object.entries(categoryStats).sort(([,a], [,b]) => b - a)[0];
-
-    const recentErrors = mockErrorLogs
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      .slice(0, 5);
-
-    return {
-      totalErrors,
-      languageStats,
-      categoryStats,
-      topLanguage,
-      topCategory,
-      recentErrors
+  useEffect(() => {
+    const fetchAnalytics = async () => {
+      try {
+        const data = await apiService.getAnalytics();
+        setAnalytics(data);
+      } catch (error) {
+        console.error('Failed to fetch analytics:', error);
+      } finally {
+        setLoading(false);
+      }
     };
+
+    fetchAnalytics();
   }, []);
 
   const StatCard: React.FC<{
@@ -59,6 +48,36 @@ export const Dashboard: React.FC = () => {
     </div>
   );
 
+  if (loading) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="flex items-center justify-center h-64">
+          <div className="w-8 h-8 border-4 border-purple-500/30 border-t-purple-500 rounded-full animate-spin"></div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!analytics) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="text-center py-12">
+          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">No data available</h3>
+          <p className="text-gray-500 dark:text-gray-400">Start logging errors to see your dashboard</p>
+        </div>
+      </div>
+    );
+  }
+
+  const topLanguage = analytics.languageStats[0];
+  const topCategory = analytics.categoryStats[0];
+  const thisWeekErrors = analytics.recentErrors.filter((error: ErrorLog) => {
+    const errorDate = new Date(error.createdAt);
+    const weekAgo = new Date();
+    weekAgo.setDate(weekAgo.getDate() - 7);
+    return errorDate >= weekAgo;
+  }).length;
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="mb-8">
@@ -77,21 +96,21 @@ export const Dashboard: React.FC = () => {
         />
         <StatCard
           title="Most Common Language"
-          value={analytics.topLanguage?.[0] || 'N/A'}
+          value={topLanguage?.language || 'N/A'}
           icon={TrendingUp}
           gradient="from-blue-500 to-blue-600"
-          description={`${analytics.topLanguage?.[1] || 0} errors`}
+          description={`${topLanguage?.count || 0} errors`}
         />
         <StatCard
           title="Top Error Category"
-          value={analytics.topCategory?.[0] || 'N/A'}
+          value={topCategory?.category || 'N/A'}
           icon={AlertTriangle}
           gradient="from-teal-500 to-teal-600"
-          description={`${analytics.topCategory?.[1] || 0} occurrences`}
+          description={`${topCategory?.count || 0} occurrences`}
         />
         <StatCard
           title="This Week"
-          value="3"
+          value={thisWeekErrors}
           icon={Calendar}
           gradient="from-orange-500 to-orange-600"
           description="New errors logged"
@@ -108,26 +127,23 @@ export const Dashboard: React.FC = () => {
             <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Errors by Language</h2>
           </div>
           <div className="space-y-4">
-            {Object.entries(analytics.languageStats)
-              .sort(([,a], [,b]) => b - a)
-              .slice(0, 6)
-              .map(([language, count]) => {
-                const percentage = (count / analytics.totalErrors) * 100;
-                return (
-                  <div key={language} className="space-y-2">
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{language}</span>
-                      <span className="text-sm text-gray-500 dark:text-gray-400">{count} errors</span>
-                    </div>
-                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                      <div
-                        className="bg-gradient-to-r from-purple-500 to-blue-500 h-2 rounded-full transition-all duration-500"
-                        style={{ width: `${percentage}%` }}
-                      ></div>
-                    </div>
+            {analytics.languageStats.slice(0, 6).map((stat: any) => {
+              const percentage = (stat.count / analytics.totalErrors) * 100;
+              return (
+                <div key={stat.language} className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{stat.language}</span>
+                    <span className="text-sm text-gray-500 dark:text-gray-400">{stat.count} errors</span>
                   </div>
-                );
-              })}
+                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                    <div
+                      className="bg-gradient-to-r from-purple-500 to-blue-500 h-2 rounded-full transition-all duration-500"
+                      style={{ width: `${percentage}%` }}
+                    ></div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
 
@@ -140,26 +156,23 @@ export const Dashboard: React.FC = () => {
             <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Errors by Category</h2>
           </div>
           <div className="space-y-4">
-            {Object.entries(analytics.categoryStats)
-              .sort(([,a], [,b]) => b - a)
-              .slice(0, 6)
-              .map(([category, count]) => {
-                const percentage = (count / analytics.totalErrors) * 100;
-                return (
-                  <div key={category} className="space-y-2">
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{category}</span>
-                      <span className="text-sm text-gray-500 dark:text-gray-400">{count} errors</span>
-                    </div>
-                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                      <div
-                        className="bg-gradient-to-r from-teal-500 to-green-500 h-2 rounded-full transition-all duration-500"
-                        style={{ width: `${percentage}%` }}
-                      ></div>
-                    </div>
+            {analytics.categoryStats.slice(0, 6).map((stat: any) => {
+              const percentage = (stat.count / analytics.totalErrors) * 100;
+              return (
+                <div key={stat.category} className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{stat.category}</span>
+                    <span className="text-sm text-gray-500 dark:text-gray-400">{stat.count} errors</span>
                   </div>
-                );
-              })}
+                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                    <div
+                      className="bg-gradient-to-r from-teal-500 to-green-500 h-2 rounded-full transition-all duration-500"
+                      style={{ width: `${percentage}%` }}
+                    ></div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -173,7 +186,7 @@ export const Dashboard: React.FC = () => {
           <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Recent Error Logs</h2>
         </div>
         <div className="space-y-4">
-          {analytics.recentErrors.map((error, index) => (
+          {analytics.recentErrors.map((error: ErrorLog, index: number) => (
             <div
               key={error.id}
               className="flex items-start space-x-4 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-200"
