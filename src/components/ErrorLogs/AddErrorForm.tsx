@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Save, Code, AlertTriangle, FileText, Lightbulb, X } from 'lucide-react';
 import { apiService } from '../../service/api';
+import {errorCategories, programmingLanguages} from '../../data/mockData';
 
 interface AddErrorFormProps {
   onSuccess: () => void;
