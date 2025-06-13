@@ -1,11 +1,14 @@
 import express from 'express';
+
 import {
   register,
   login,
   getProfile,
   updateProfile
 } from '../controllers/authController.js';
+
 import { authenticate } from '../middleware/auth.js';
+
 import {
   validateRegistration,
   validateLogin
