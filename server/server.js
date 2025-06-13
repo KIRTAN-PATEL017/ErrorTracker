@@ -3,6 +3,10 @@ import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
 import connectDB from './config/database.js';
+import authRoutes from './routes/auth.js';
+import errorLogRoutes from './routes/errorLogs.js';
+import { notFound, errorHandler } from './middleware/errorHandler.js';
+import { generalLimiter, authLimiter } from './middleware/security.js';
 
 // Load environment variables
 dotenv.config();
@@ -15,6 +19,7 @@ const PORT = process.env.PORT || 5000;
 
 // Security middleware
 app.use(helmet());
+app.use(generalLimiter);
 
 // CORS configuration
 app.use(cors({
@@ -38,6 +43,10 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// API routes
+app.use('/api/auth', authLimiter, authRoutes);
+app.use('/api/error-logs', errorLogRoutes);
+
 // Welcome route
 app.get('/', (req, res) => {
   res.json({
@@ -51,6 +60,10 @@ app.get('/', (req, res) => {
     }
   });
 });
+
+// Error handling middleware
+app.use(notFound);
+app.use(errorHandler);
 
 // Start server
 app.listen(PORT, () => {
